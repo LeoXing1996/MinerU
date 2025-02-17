@@ -15,6 +15,8 @@ CONFIG_FILE_NAME = os.getenv('MINERU_TOOLS_CONFIG_JSON', 'magic-pdf.json')
 def read_config():
     if os.path.isabs(CONFIG_FILE_NAME):
         config_file = CONFIG_FILE_NAME
+    elif os.path.exists(CONFIG_FILE_NAME):
+        config_file = CONFIG_FILE_NAME
     else:
         home_dir = os.path.expanduser('~')
         config_file = os.path.join(home_dir, CONFIG_FILE_NAME)
@@ -59,7 +61,9 @@ def get_local_models_dir():
     config = read_config()
     models_dir = config.get('models-dir')
     if models_dir is None:
-        logger.warning(f"'models-dir' not found in {CONFIG_FILE_NAME}, use '/tmp/models' as default")
+        logger.warning(
+            f"'models-dir' not found in {CONFIG_FILE_NAME}, use '/tmp/models' as default"
+        )
         return '/tmp/models'
     else:
         return models_dir
@@ -70,8 +74,12 @@ def get_local_layoutreader_model_dir():
     layoutreader_model_dir = config.get('layoutreader-model-dir')
     if layoutreader_model_dir is None or not os.path.exists(layoutreader_model_dir):
         home_dir = os.path.expanduser('~')
-        layoutreader_at_modelscope_dir_path = os.path.join(home_dir, '.cache/modelscope/hub/ppaanngggg/layoutreader')
-        logger.warning(f"'layoutreader-model-dir' not exists, use {layoutreader_at_modelscope_dir_path} as default")
+        layoutreader_at_modelscope_dir_path = os.path.join(
+            home_dir, '.cache/modelscope/hub/ppaanngggg/layoutreader'
+        )
+        logger.warning(
+            f"'layoutreader-model-dir' not exists, use {layoutreader_at_modelscope_dir_path} as default"
+        )
         return layoutreader_at_modelscope_dir_path
     else:
         return layoutreader_model_dir
@@ -81,7 +89,9 @@ def get_device():
     config = read_config()
     device = config.get('device-mode')
     if device is None:
-        logger.warning(f"'device-mode' not found in {CONFIG_FILE_NAME}, use 'cpu' as default")
+        logger.warning(
+            f"'device-mode' not found in {CONFIG_FILE_NAME}, use 'cpu' as default"
+        )
         return 'cpu'
     else:
         return device
@@ -91,8 +101,12 @@ def get_table_recog_config():
     config = read_config()
     table_config = config.get('table-config')
     if table_config is None:
-        logger.warning(f"'table-config' not found in {CONFIG_FILE_NAME}, use 'False' as default")
-        return json.loads(f'{{"model": "{MODEL_NAME.RAPID_TABLE}","enable": false, "max_time": 400}}')
+        logger.warning(
+            f"'table-config' not found in {CONFIG_FILE_NAME}, use 'False' as default"
+        )
+        return json.loads(
+            f'{{"model": "{MODEL_NAME.RAPID_TABLE}","enable": false, "max_time": 400}}'
+        )
     else:
         return table_config
 
@@ -101,7 +115,9 @@ def get_layout_config():
     config = read_config()
     layout_config = config.get('layout-config')
     if layout_config is None:
-        logger.warning(f"'layout-config' not found in {CONFIG_FILE_NAME}, use '{MODEL_NAME.LAYOUTLMv3}' as default")
+        logger.warning(
+            f"'layout-config' not found in {CONFIG_FILE_NAME}, use '{MODEL_NAME.LAYOUTLMv3}' as default"
+        )
         return json.loads(f'{{"model": "{MODEL_NAME.LAYOUTLMv3}"}}')
     else:
         return layout_config
@@ -111,16 +127,23 @@ def get_formula_config():
     config = read_config()
     formula_config = config.get('formula-config')
     if formula_config is None:
-        logger.warning(f"'formula-config' not found in {CONFIG_FILE_NAME}, use 'True' as default")
-        return json.loads(f'{{"mfd_model": "{MODEL_NAME.YOLO_V8_MFD}","mfr_model": "{MODEL_NAME.UniMerNet_v2_Small}","enable": true}}')
+        logger.warning(
+            f"'formula-config' not found in {CONFIG_FILE_NAME}, use 'True' as default"
+        )
+        return json.loads(
+            f'{{"mfd_model": "{MODEL_NAME.YOLO_V8_MFD}","mfr_model": "{MODEL_NAME.UniMerNet_v2_Small}","enable": true}}'
+        )
     else:
         return formula_config
+
 
 def get_llm_aided_config():
     config = read_config()
     llm_aided_config = config.get('llm-aided-config')
     if llm_aided_config is None:
-        logger.warning(f"'llm-aided-config' not found in {CONFIG_FILE_NAME}, use 'None' as default")
+        logger.warning(
+            f"'llm-aided-config' not found in {CONFIG_FILE_NAME}, use 'None' as default"
+        )
         return None
     else:
         return llm_aided_config

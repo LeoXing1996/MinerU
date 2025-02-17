@@ -81,6 +81,11 @@ def do_parse(
     f_dump_model_json=True,
     f_dump_orig_pdf=True,
     f_dump_content_list=True,
+    # NOTE: add by us
+    f_dump_illustration_info=True,
+    f_save_illustration=True,
+    f_save_svg=True,
+    # NOTE: add by us
     f_make_md_mode=MakeMode.MM_MD,
     f_draw_model_bbox=False,
     f_draw_line_sort_bbox=False,
@@ -104,8 +109,9 @@ def do_parse(
 
     local_image_dir, local_md_dir = prepare_env(output_dir, pdf_file_name, parse_method)
 
-    image_writer, md_writer = FileBasedDataWriter(local_image_dir), FileBasedDataWriter(
-        local_md_dir
+    image_writer, md_writer = (
+        FileBasedDataWriter(local_image_dir),
+        FileBasedDataWriter(local_md_dir),
     )
     image_dir = str(os.path.basename(local_image_dir))
 
@@ -170,7 +176,6 @@ def do_parse(
             logger.error('need model list input')
             exit(2)
     else:
-
         infer_result = InferenceResult(model_list, ds)
         if parse_method == 'ocr':
             pipe_result = infer_result.pipe_ocr_mode(
@@ -183,13 +188,12 @@ def do_parse(
         else:
             if ds.classify() == SupportedPdfParseMethod.TXT:
                 pipe_result = infer_result.pipe_txt_mode(
-                        image_writer, debug_mode=True, lang=ds._lang
-                    )
+                    image_writer, debug_mode=True, lang=ds._lang
+                )
             else:
                 pipe_result = infer_result.pipe_ocr_mode(
-                        image_writer, debug_mode=True, lang=ds._lang
-                    )
-
+                    image_writer, debug_mode=True, lang=ds._lang
+                )
 
     if f_draw_model_bbox:
         infer_result.draw_model(
@@ -212,7 +216,7 @@ def do_parse(
         draw_char_bbox(pdf_bytes, local_md_dir, f'{pdf_file_name}_char_bbox.pdf')
 
     if f_dump_md:
-        pipe_result.dump_md(
+        md_content = pipe_result.dump_md(
             md_writer,
             f'{pdf_file_name}.md',
             image_dir,
@@ -234,12 +238,20 @@ def do_parse(
 
     if f_dump_content_list:
         pipe_result.dump_content_list(
-            md_writer,
-            f'{pdf_file_name}_content_list.json',
-            image_dir
+            md_writer, f'{pdf_file_name}_content_list.json', image_dir
         )
 
     logger.info(f'local output dir is {local_md_dir}')
+
+    if f_dump_illustration_info:
+        pipe_result.dump_illustration_info(
+            md_writer,
+            f'{pdf_file_name}_illustration_info.json',
+            md_content,
+            save_pdf=f_save_illustration,
+            save_svg=f_save_svg,
+            pdf_file_path=image_dir,
+        )
 
 
 parse_pdf_methods = click.Choice(['ocr', 'txt', 'auto'])

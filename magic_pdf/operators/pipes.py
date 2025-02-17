@@ -6,9 +6,13 @@ from typing import Callable
 from magic_pdf.config.make_content_config import DropMode, MakeMode
 from magic_pdf.data.data_reader_writer import DataWriter
 from magic_pdf.data.dataset import Dataset
+from magic_pdf.dict2illustration import union_make as union_make_illus
 from magic_pdf.dict2md.ocr_mkcontent import union_make
-from magic_pdf.libs.draw_bbox import (draw_layout_bbox, draw_line_sort_bbox,
-                                      draw_span_bbox)
+from magic_pdf.libs.draw_bbox import (
+    draw_layout_bbox,
+    draw_line_sort_bbox,
+    draw_span_bbox,
+)
 from magic_pdf.libs.json_compressor import JsonCompressor
 
 
@@ -22,6 +26,82 @@ class PipeResult:
         """
         self._pipe_res = pipe_res
         self._dataset = dataset
+
+    def get_illustration_info(self, md_content: str) -> dict:
+        pdf_info_list = self._pipe_res['pdf_info']
+        illustration_info_list = union_make_illus(
+            pdf_info_list,
+            md_content,
+            self._dataset,
+            drop_failed=True,
+        )
+        illustration_info = {
+            'illustration_info': illustration_info_list,
+            '_version_name': self._pipe_res['_version_name'],
+            '_parse_type': self._pipe_res['_parse_type'],
+        }
+        return illustration_info
+
+    def dump_illustration_info(
+        self,
+        writer: DataWriter,
+        file_path: str,
+        md_content: str,
+        save_image: bool = True,
+        save_pdf: bool = False,
+        save_svg: bool = False,
+        pdf_file_path: str = 'illustration',
+    ):
+        """Dump the illustration content used for training."""
+        illus_info = self.get_illustration_info(md_content)
+        illus_info_list = illus_info['illustration_info']
+
+        for one_illus_info in illus_info_list:
+            if save_pdf:
+                one_illus_info['illus_save_path'] = []
+                for illus, name in zip(
+                    one_illus_info['illus'], one_illus_info['illus_name']
+                ):
+                    save_path = os.path.join(writer._parent_dir, pdf_file_path, name)
+                    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                    illus.save(save_path)
+                    one_illus_info['illus_save_path'].append(save_path)
+            # remove illus instance
+            one_illus_info.pop('illus')
+
+            if save_svg:
+                one_illus_info['svg_save_path'] = []
+                for illus, name in zip(
+                    one_illus_info['shape_code'], one_illus_info['illus_name']
+                ):
+                    svg = illus.pop('svg')
+                    save_path = os.path.join(
+                        writer._parent_dir, 'images', name.replace('.pdf', '.svg')
+                    )
+                    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                    with open(save_path, 'w') as f:
+                        f.write(svg)
+                    one_illus_info['svg_save_path'].append(save_path)
+
+            image_info_list = one_illus_info['image_code']
+            for image_info, name in zip(image_info_list, one_illus_info['illus_name']):
+                for idx, sub_image_info in enumerate(image_info):
+                    if save_image:
+                        image_save_path = os.path.join(
+                            writer._parent_dir,
+                            'images',
+                            name.replace('.pdf', f'_{idx}.png'),
+                        )
+                        os.makedirs(os.path.dirname(image_save_path), exist_ok=True)
+                        sub_image_info.pop('image').save(image_save_path)
+                        sub_image_info['image'] = image_save_path
+                    else:
+                        # do not save, directly drop the image
+                        sub_image_info.pop('image')
+
+        writer.write_string(
+            file_path, json.dumps(illus_info, ensure_ascii=False, indent=4)
+        )
 
     def get_markdown(
         self,
@@ -52,7 +132,7 @@ class PipeResult:
         img_dir_or_bucket_prefix: str,
         drop_mode=DropMode.NONE,
         md_make_mode=MakeMode.MM_MD,
-    ):
+    ) -> str:
         """Dump The Markdown.
 
         Args:
@@ -67,6 +147,7 @@ class PipeResult:
             img_dir_or_bucket_prefix, drop_mode=drop_mode, md_make_mode=md_make_mode
         )
         writer.write_string(file_path, md_content)
+        return md_content
 
     def get_content_list(
         self,
@@ -107,7 +188,8 @@ class PipeResult:
             drop_mode (str, optional): Drop strategy when some page which is corrupted or inappropriate. Defaults to DropMode.NONE.
         """
         content_list = self.get_content_list(
-            image_dir_or_bucket_prefix, drop_mode=drop_mode,
+            image_dir_or_bucket_prefix,
+            drop_mode=drop_mode,
         )
         writer.write_string(
             file_path, json.dumps(content_list, ensure_ascii=False, indent=4)

@@ -18,10 +18,9 @@ image_suffixes = ['.png', '.jpeg', '.jpg']
 
 
 @click.command()
-@click.version_option(__version__,
-                      '--version',
-                      '-v',
-                      help='display the version and exit')
+@click.version_option(
+    __version__, '--version', '-v', help='display the version and exit'
+)
 @click.option(
     '-p',
     '--path',
@@ -91,22 +90,23 @@ def cli(path, output_dir, method, lang, debug_able, start_page_id, end_page_id):
     model_config.__model_mode__ = 'full'
     os.makedirs(output_dir, exist_ok=True)
     temp_dir = tempfile.mkdtemp()
+
     def read_fn(path: Path):
         if path.suffix in ms_office_suffixes:
             convert_file_to_pdf(str(path), temp_dir)
-            fn = os.path.join(temp_dir, f"{path.stem}.pdf")
+            fn = os.path.join(temp_dir, f'{path.stem}.pdf')
         elif path.suffix in image_suffixes:
             with open(str(path), 'rb') as f:
                 bits = f.read()
             pdf_bytes = fitz.open(stream=bits).convert_to_pdf()
-            fn = os.path.join(temp_dir, f"{path.stem}.pdf")
+            fn = os.path.join(temp_dir, f'{path.stem}.pdf')
             with open(fn, 'wb') as f:
                 f.write(pdf_bytes)
         elif path.suffix in pdf_suffixes:
             fn = str(path)
         else:
-            raise Exception(f"Unknown file suffix: {path.suffix}")
-        
+            raise Exception(f'Unknown file suffix: {path.suffix}')
+
         disk_rw = FileBasedDataReader(os.path.dirname(fn))
         return disk_rw.read(os.path.basename(fn))
 
@@ -123,7 +123,7 @@ def cli(path, output_dir, method, lang, debug_able, start_page_id, end_page_id):
                 debug_able,
                 start_page_id=start_page_id,
                 end_page_id=end_page_id,
-                lang=lang
+                lang=lang,
             )
 
         except Exception as e:

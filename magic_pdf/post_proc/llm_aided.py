@@ -1,11 +1,12 @@
 # Copyright (c) Opendatalab. All rights reserved.
 import json
+
 from loguru import logger
-from magic_pdf.dict2md.ocr_mkcontent import merge_para_with_text
 from openai import OpenAI
 
+from magic_pdf.dict2md.ocr_mkcontent import merge_para_with_text
 
-#@todo: 有的公式以"\"结尾，这样会导致尾部拼接的"$"被转义，也需要修复
+# @todo: 有的公式以"\"结尾，这样会导致尾部拼接的"$"被转义，也需要修复
 formula_optimize_prompt = """请根据以下指南修正LaTeX公式的错误，确保公式能够渲染且符合原始内容：
 
 1. 修正渲染或编译错误：
@@ -24,7 +25,7 @@ $FORMULA
 Your corrected result:
 """
 
-text_optimize_prompt = f"""请根据以下指南修正OCR引起的错误，确保文本连贯并符合原始内容：
+text_optimize_prompt = """请根据以下指南修正OCR引起的错误，确保文本连贯并符合原始内容：
 
 1. 修正OCR引起的拼写错误和错误：
    - 修正常见的OCR错误（例如，'rn' 被误读为 'm'）
@@ -43,12 +44,12 @@ text_optimize_prompt = f"""请根据以下指南修正OCR引起的错误，确�
 4. 保持连贯性：
    - 确保内容与前文顺畅连接
    - 适当处理在句子中间开始或结束的文本
-   
+
 5. 修正行内公式：
    - 去除行内公式前后多余的空格
    - 修正公式中的OCR错误
    - 确保公式能够通过KaTeX渲染
-   
+
 6. 修正全角字符
     - 修正全角标点符号为半角标点符号
     - 修正全角字母为半角字母
@@ -63,24 +64,27 @@ Current chunk to process:
 Corrected text:
 """
 
+
 def llm_aided_formula(pdf_info_dict, formula_aided_config):
     pass
+
 
 def llm_aided_text(pdf_info_dict, text_aided_config):
     pass
 
+
 def llm_aided_title(pdf_info_dict, title_aided_config):
     client = OpenAI(
-        api_key=title_aided_config["api_key"],
-        base_url=title_aided_config["base_url"],
+        api_key=title_aided_config['api_key'],
+        base_url=title_aided_config['base_url'],
     )
     title_dict = {}
     origin_title_list = []
     i = 0
     for page_num, page in pdf_info_dict.items():
-        blocks = page["para_blocks"]
+        blocks = page['para_blocks']
         for block in blocks:
-            if block["type"] == "title":
+            if block['type'] == 'title':
                 origin_title_list.append(block)
                 title_text = merge_para_with_text(block)
                 page_line_height_list = []
@@ -88,10 +92,16 @@ def llm_aided_title(pdf_info_dict, title_aided_config):
                     bbox = line['bbox']
                     page_line_height_list.append(int(bbox[3] - bbox[1]))
                 if len(page_line_height_list) > 0:
-                    line_avg_height = sum(page_line_height_list) / len(page_line_height_list)
+                    line_avg_height = sum(page_line_height_list) / len(
+                        page_line_height_list
+                    )
                 else:
                     line_avg_height = int(block['bbox'][3] - block['bbox'][1])
-                title_dict[f"{i}"] = [title_text, line_avg_height, int(page_num[5:])+1]
+                title_dict[f'{i}'] = [
+                    title_text,
+                    line_avg_height,
+                    int(page_num[5:]) + 1,
+                ]
                 i += 1
     # logger.info(f"Title list: {title_dict}")
 
@@ -114,13 +124,13 @@ def llm_aided_title(pdf_info_dict, title_aided_config):
     - 标题从前至后的层级必须是连续的，不能跳过层级
     - 标题层级最多为4级，不要添加过多的层级
     - 优化后的标题只保留代表该标题的层级的整数，不要保留其他信息
-    
+
 5. 合理性检查与微调：
     - 在完成初步分级后，仔细检查分级结果的合理性
     - 根据上下文关系和逻辑顺序，对不合理的分级进行微调
     - 确保最终的分级结果符合文档的实际结构和逻辑
-    
-IMPORTANT: 
+
+IMPORTANT:
 请直接返回优化过的由标题层级组成的json，格式如下：
 {{"0":1,"1":2,"2":2,"3":3}}
 返回的json不需要格式化。
@@ -138,9 +148,8 @@ Corrected title list:
     while retry_count < max_retries:
         try:
             completion = client.chat.completions.create(
-                model=title_aided_config["model"],
-                messages=[
-                    {'role': 'user', 'content': title_optimize_prompt}],
+                model=title_aided_config['model'],
+                messages=[{'role': 'user', 'content': title_optimize_prompt}],
                 temperature=0.7,
             )
             json_completion = json.loads(completion.choices[0].message.content)
@@ -150,17 +159,65 @@ Corrected title list:
 
             if len(json_completion) == len(title_dict):
                 for i, origin_title_block in enumerate(origin_title_list):
-                    origin_title_block["level"] = int(json_completion[str(i)])
+                    origin_title_block['level'] = int(json_completion[str(i)])
                 break
             else:
-                logger.warning("The number of titles in the optimized result is not equal to the number of titles in the input.")
+                logger.warning(
+                    'The number of titles in the optimized result is not equal to the number of titles in the input.'
+                )
                 retry_count += 1
         except Exception as e:
             if isinstance(e, json.decoder.JSONDecodeError):
-                logger.warning(f"JSON decode error on attempt {retry_count + 1}: {e}")
+                logger.warning(f'JSON decode error on attempt {retry_count + 1}: {e}')
             else:
                 logger.exception(e)
             retry_count += 1
 
     if json_completion is None:
-        logger.error("Failed to decode JSON after maximum retries.")
+        logger.error('Failed to decode JSON after maximum retries.')
+
+
+def llm_aided_description_search(
+    illus_name: str, content: str, content_aided_config: dict
+):
+    # work for Qwen-Max and Qwen2.5-14b-instruct, claude-sonnet
+    content_search_prompt = f"""Please extract the text related to "{illus_name}" from the following content. This can include its function and the ideas it conveys, and can be more than one sentence.
+
+    Text to extract: "{content}"
+
+    IMPORTANT: Return the original text, do not summarize it yourself; only return the text, do not include other information
+
+    Extracted text: "
+    """
+
+    client = OpenAI(
+        api_key=content_aided_config['api_key'],
+        base_url=content_aided_config['base_url'],
+        default_headers={'x-foo': 'true'},
+    )
+
+    retry_count = 0
+    max_retries = 3
+    desp = None
+
+    while retry_count < max_retries:
+        try:
+            completion = client.chat.completions.create(
+                model=content_aided_config['model'],
+                messages=[
+                    {'role': 'user', 'content': content_search_prompt}
+                    # {'role': 'user', 'content': [{'type': 'text', 'text': content_search_prompt}]}
+                ],
+                temperature=0,
+            )
+            desp = completion.choices[0].message.content
+            break
+
+        except Exception as e:
+            logger.exception(e)
+            retry_count += 1
+
+    if desp is None:
+        logger.error('Failed to decode JSON after maximum retries.')
+
+    return [desp]
