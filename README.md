@@ -20,7 +20,6 @@
 [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/gist/myhloli/3b3a00a4a0a61577b6c30f989092d20d/mineru_demo.ipynb)
 [![Paper](https://img.shields.io/badge/Paper-arXiv-green)](https://arxiv.org/abs/2409.18839)
 
-
 <a href="https://trendshift.io/repositories/11174" target="_blank"><img src="https://trendshift.io/api/badge/repositories/11174" alt="opendatalab%2FMinerU | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
 <!-- language -->
@@ -46,7 +45,91 @@ Easier to use: Just grab MinerU Desktop. No coding, no login, just a simple inte
 
 </div>
 
+# Modified by LeoX
+
+## 1.quick start (after install and download models)
+
+```bash
+magic-pdf -p ../pdf2svg/2412.15205v1.pdf -m auto -o test -s 1 -e 2
+```
+
+`-p` for pdf path, `-o` for output path, `-s` for start page, `-e` for end page
+
+## 2. About config
+
+In original implementation, the config file is loaded from `~/magic-pdf.json`. This is hard to modify. So this version support load config from **local folder**, see `magic_pdf/libs/config_reader.py:read_config` for detail.
+
+We additional support `description_aided` field in config file, which is used to refine the description extracted from the paper. There is a example in `magic-pdf.json`.
+
+```json
+{
+    // empty for bucket, we do not load/upload model/data from bucket
+    "bucket_info": {
+        "bucket-name-1": [
+            "ak",
+            "sk",
+            "endpoint"
+        ],
+        "bucket-name-2": [
+            "ak",
+            "sk",
+            "endpoint"
+        ]
+    },
+    // load models from local folder, avoid network error
+    "models-dir": "/home/xingzhening/.cache/modelscope/hub/opendatalab/PDF-Extract-Kit-1___0/models",
+    "layoutreader-model-dir": "/home/xingzhening/.cache/modelscope/hub/ppaanngggg/layoutreader",
+    "device-mode": "cpu", // modify if you have a GPU instance
+    "layout-config": {
+        "model": "doclayout_yolo"
+    },
+    "formula-config": {
+        "mfd_model": "yolo_v8_mfd",
+        "mfr_model": "unimernet_small",
+        "enable": true
+    },
+    // llm configs
+    "llm-aided-config": {
+        "formula_aided": {
+            "api_key": "your_api_key",
+            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "model": "qwen2.5-7b-instruct",
+            "enable": false
+        },
+        "text_aided": {
+            "api_key": "your_api_key",
+            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "model": "qwen2.5-7b-instruct",
+            "enable": false
+        },
+        "title_aided": {
+            "api_key": "your_api_key",
+            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "model": "qwen2.5-32b-instruct",
+            "enable": false
+        },
+        // llm config added by us, used to refine the description
+        // I hard code to use the OpenAI client, you can modify it if you want to use Qwen or the other client
+        // see `magic_pdf/post_proc/llm_aided.py:llm_aided_description_search`
+        "description_aided": {
+            "api_key": "YOUR_API",
+            "base_url": "YOUR_BASE_URL",
+            "model": "QWEN-MAX is the best!",
+            "enable": true
+        }
+    },
+    "config_version": "1.1.1"
+}
+```
+
+## 3. How this code work?
+
+- `magic_pdf/operators/pipes.py`: `PipeResult` is the post-process class to process the results from detectors (e.g., layout / ocr...) and dump the results to json file. We insert our **high-level code/data structure generation** process in this class. And `func:PipeResults.get_illustration_info` is the core function to generate the high-level code.
+
+In `get_illustration_info`, it call `magic_pdf/dict2illustration/mkcontent.py:union_make` function, all logic about filter, element extraction, and description refine are implemented in this function. (If you want to improve the shape extract logic, you can find `shape_to_code` function and then modify it.)
+
 # Changelog
+
 - 2025/01/22 1.1.0 released. In this version we have focused on improving parsing accuracy and efficiency:
   - Model capability upgrade (requires re-executing the [model download process](docs/how_to_download_models_en.md) to obtain incremental updates of model files)
     - The layout recognition model has been upgraded to the latest `doclayout_yolo(2501)` model, improving layout recognition accuracy.
@@ -168,7 +251,7 @@ There are three different ways to experience MinerU:
   - [Linux + CANN](#using-npu)
   - [MacOS + MPS](#using-mps)
 
-> [!WARNING]
+> \[!WARNING\]
 > **Pre-installation Notice—Hardware and Software Environment Support**
 >
 > To ensure the stability and reliability of the project, we only optimize and test for specific hardware and software environments during development. This ensures that users deploying and running the project on recommended system configurations will get the best performance with the fewest compatibility issues.
@@ -258,13 +341,12 @@ Refer to [How to Download Model Files](docs/how_to_download_models_en.md) for de
 After completing the [2. Download model weight files](#2-download-model-weight-files) step, the script will automatically generate a `magic-pdf.json` file in the user directory and configure the default model path.
 You can find the `magic-pdf.json` file in your 【user directory】.
 
-> [!TIP]
+> \[!TIP\]
 > The user directory for Windows is "C:\\Users\\username", for Linux it is "/home/username", and for macOS it is "/Users/username".
 
 You can modify certain configurations in this file to enable or disable features, such as table recognition:
 
-
-> [!NOTE]
+> \[!NOTE\]
 > If the following items are not present in the JSON, please manually add the required items and remove the comment content (standard JSON does not support comments).
 
 ```json
@@ -294,20 +376,22 @@ If your device supports CUDA and meets the GPU requirements of the mainline envi
 - [Ubuntu 22.04 LTS + GPU](docs/README_Ubuntu_CUDA_Acceleration_en_US.md)
 - [Windows 10/11 + GPU](docs/README_Windows_CUDA_Acceleration_en_US.md)
 - Quick Deployment with Docker
-> [!IMPORTANT]
+
+> \[!IMPORTANT\]
 > Docker requires a GPU with at least 8GB of VRAM, and all acceleration features are enabled by default.
 >
 > Before running this Docker, you can use the following command to check if your device supports CUDA acceleration on Docker.
-> 
+>
 > ```bash
 > docker run --rm --gpus=all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
 > ```
-  ```bash
-  wget https://github.com/opendatalab/MinerU/raw/master/docker/global/Dockerfile -O Dockerfile
-  docker build -t mineru:latest .
-  docker run --rm -it --gpus=all mineru:latest /bin/bash -c "echo 'source /opt/mineru_venv/bin/activate' >> ~/.bashrc && exec bash"
-  magic-pdf --help
-  ```
+
+```bash
+wget https://github.com/opendatalab/MinerU/raw/master/docker/global/Dockerfile -O Dockerfile
+docker build -t mineru:latest .
+docker run --rm -it --gpus=all mineru:latest /bin/bash -c "echo 'source /opt/mineru_venv/bin/activate' >> ~/.bashrc && exec bash"
+magic-pdf --help
+```
 
 ### Using NPU
 
@@ -328,7 +412,7 @@ You can enable MPS acceleration by setting the `device-mode` parameter to `mps` 
 }
 ```
 
-> [!TIP]
+> \[!TIP\]
 > Since the formula recognition task cannot utilize MPS acceleration, you can disable the formula recognition feature in tasks where it is not needed to achieve optimal performance.
 >
 > You can disable the formula recognition feature by setting the `enable` parameter in the `formula-config` section to `false`.
@@ -339,21 +423,19 @@ You can enable MPS acceleration by setting the `device-mode` parameter to `mps` 
 
 [Using MinerU via Command Line](https://mineru.readthedocs.io/en/latest/user_guide/usage/command_line.html)
 
-> [!TIP]
+> \[!TIP\]
 > For more information about the output files, please refer to the [Output File Description](docs/output_file_en_us.md).
 
 ### API
 
 [Using MinerU via Python API](https://mineru.readthedocs.io/en/latest/user_guide/usage/api.html)
 
-
 ### Deploy Derived Projects
 
-Derived projects include secondary development projects based on MinerU by project developers and community developers,  
+Derived projects include secondary development projects based on MinerU by project developers and community developers,
 such as application interfaces based on Gradio, RAG based on llama, web demos similar to the official website, lightweight multi-GPU load balancing client/server ends, etc.
-These projects may offer more features and a better user experience.  
+These projects may offer more features and a better user experience.
 For specific deployment methods, please refer to the [Derived Project README](projects/README.md)
-
 
 ### Development Guide
 
@@ -361,8 +443,8 @@ TODO
 
 # TODO
 
-- [x] Reading order based on the model  
-- [x] Recognition of `index` and `list` in the main text  
+- [x] Reading order based on the model
+- [x] Recognition of `index` and `list` in the main text
 - [x] Table recognition
 - [x] Heading Classification
 - [ ] Code block recognition in the main text
@@ -414,13 +496,13 @@ This project currently uses PyMuPDF to achieve advanced functionality. However, 
 
 ```bibtex
 @misc{wang2024mineruopensourcesolutionprecise,
-      title={MinerU: An Open-Source Solution for Precise Document Content Extraction}, 
+      title={MinerU: An Open-Source Solution for Precise Document Content Extraction},
       author={Bin Wang and Chao Xu and Xiaomeng Zhao and Linke Ouyang and Fan Wu and Zhiyuan Zhao and Rui Xu and Kaiwen Liu and Yuan Qu and Fukai Shang and Bo Zhang and Liqun Wei and Zhihao Sui and Wei Li and Botian Shi and Yu Qiao and Dahua Lin and Conghui He},
       year={2024},
       eprint={2409.18839},
       archivePrefix={arXiv},
       primaryClass={cs.CV},
-      url={https://arxiv.org/abs/2409.18839}, 
+      url={https://arxiv.org/abs/2409.18839},
 }
 
 @article{he2024opendatalab,
