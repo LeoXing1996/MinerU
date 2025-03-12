@@ -225,7 +225,7 @@ def union_make(
                 related_content = []
 
                 desp_list = None
-                desp_modified_by_llm = False
+                desp_modified_by_llm = []
                 for content in md_content_list:
                     # skip the caption block, only search in the content block
                     if illus_caption.strip() in content:
@@ -233,6 +233,7 @@ def union_make(
                     for name in illus_name:
                         # write a regex to match the template
                         desp_list = get_illus_description_from_content(name, content)
+                        modified_by_llm = False
                         if desp_list is not None:
                             llm_aided_config = get_llm_aided_config()
                             if llm_aided_config is not None:
@@ -247,12 +248,16 @@ def union_make(
                                     )
                                     if desp_for_illus is not None:
                                         desp_list = desp_for_illus
-                                        desp_modified_by_llm = True
-                            related_content += desp_list
+                                        modified_by_llm = True
 
-                content_msg = f'Cannot find match content for illustration "Figure {illus_idx}" (Page {page_idx}).'
+                            related_content += desp_list
+                            desp_modified_by_llm.append(modified_by_llm)
+
                 if not related_content:
+                    content_msg = f'Cannot find match content for illustration "Figure {illus_idx}" @ (Page {page_idx}).'
                     logger.warning(content_msg)
+                else:
+                    content_msg = f'Found {len(related_content)} related content for illustration "Figure {illus_idx}" @ (Page {page_idx}).'
                 logger.info(
                     f'"Figure {illus_idx}" (Page {page_idx}), finished processing.'
                 )
