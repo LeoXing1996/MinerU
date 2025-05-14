@@ -1,10 +1,13 @@
 import re
+import os
 from typing import Optional, Tuple, Union
 
 import fitz
 import pymupdf
+import base64
 from loguru import logger
 from pymupdf import Document
+from openai import OpenAI
 
 from magic_pdf.config.ocr_content_type import BlockType, ContentType
 from magic_pdf.data.dataset import Dataset
@@ -49,7 +52,7 @@ def crop_pdf(
     dataset: Dataset,
     page_idx: int,
     bbox: list[int],
-    image_ratio_threshold: Optional[float] = 0.1,
+    image_ratio_threshold: Optional[float] = 0.2,
 ) -> Tuple[Optional[Document], bool, str]:
     # create a new pdf instance from raw data
     pdf = fitz.open('pdf', dataset._data_bits)
@@ -174,6 +177,28 @@ def union_make(
                                         dataset, page_idx, bbox
                                     )
                                     # TODO: insert a MLLM-based filter here!
+                                    # filtered by mllm
+
+                                    ###################################
+                                    if status:
+                                        img_path = get_illus_images(illus)
+                                        # mllm_status, mllm_msg = mllm_filter(img_path)
+                                        mllm_status, mllm_msg = multi_turn_filter(
+                                            img_path
+                                        )
+                                        print(status, mllm_status, mllm_msg)
+                                        status = status and mllm_status
+                                        print(status)
+                                        msg = (
+                                            'Rule-based: '
+                                            + msg
+                                            + ' VLM based: '
+                                            + mllm_msg
+                                        )
+                                        # 删除图片
+                                        os.remove(img_path)
+                                    ###################################
+
                                     illus_list.append(illus)
                                     illus_status.append(status)
                                     shape_filter_msg_list.append(msg)
@@ -324,3 +349,192 @@ def get_illus_description_from_content(
     desp_pattern = re.compile(r'[^.!?]*\b' + re.escape(illus_name) + r'\b[^.!?]*[.!?]')
     desp = desp_pattern.findall(content)
     return desp if desp else None
+
+
+def get_illus_images(doc, save_path='temp_images'):
+    os.makedirs(save_path, exist_ok=True)
+    # img_paths = []
+
+    assert len(doc) == 1, 'Only one page is allowed.'
+    pix = doc[0].get_pixmap(
+        matrix=fitz.Identity,
+        dpi=720,
+        colorspace=fitz.csRGB,
+        clip=None,
+        alpha=False,
+        annots=True,
+    )
+
+    import hashlib
+    import time
+
+    # 计算图像数据的哈希值以确保唯一性
+    img_hash = hashlib.md5(pix.samples).hexdigest()[:6]
+    timestamp = int(time.time())
+    img_name = f'figure_page{doc[0].number}_{timestamp}_{img_hash}.jpg'
+
+    img_path = os.path.join(save_path, img_name)
+    pix.save(img_path)
+
+    return img_path
+
+
+def mllm_filter(image_path):
+    prompt = """
+    Please analyze the provided image to determine if it is a methodology, overview, or pipeline figure from an academic paper.
+    Consider the following criteria:
+    1. Does the image illustrate a step-by-step process or workflow?
+    2. Is there a clear depiction of stages, components, or modules in a system or method?
+    3. Does the image contain text labels, annotations, or descriptions explaining a procedure, technique, or system?
+    4. Does the image have a structured design (e.g., block diagrams, flowcharts) that outlines the working principle or steps of a system or method?
+    5. Does the image align with the typical context in academic papers where methodology or pipeline figures are presented?
+    6. The image should not include any experimental tables, charts, or graphs.
+    8. The image should not be a figure that includes texts only.
+
+    Based on these criteria, please respond 'Yes' if the image meets the description of a methodology, overview, or pipeline figure, otherwise 'No'.
+    Please respond with 'Yes' or 'No' only.
+    """
+
+    def encode_image(image_path):
+        with open(image_path, 'rb') as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
+
+    base64_image = encode_image(image_path)
+    client = OpenAI(
+        api_key='sk-02ec4b4ba31a406894cbe3bdb92e96a1',
+        base_url='https://dashscope.aliyuncs.com/compatible-mode/v1',
+    )
+    completion = client.chat.completions.create(
+        model='qwen-vl-max-latest',
+        messages=[
+            {
+                'role': 'system',
+                'content': [{'type': 'text', 'text': 'You are a helpful assistant.'}],
+            },
+            {
+                'role': 'user',
+                'content': [
+                    {
+                        'type': 'image_url',
+                        # 需要注意，传入Base64，图像格式（即image/{format}）需要与支持的图片列表中的Content Type保持一致。"f"是字符串格式化的方法。
+                        # PNG图像：  f"data:image/png;base64,{base64_image}"
+                        # JPEG图像： f"data:image/jpeg;base64,{base64_image}"
+                        # WEBP图像： f"data:image/webp;base64,{base64_image}"
+                        'image_url': {'url': f'data:image/jpeg;base64,{base64_image}'},
+                    },
+                    {'type': 'text', 'text': f'{prompt}'},
+                ],
+            },
+        ],
+    )
+    # print(completion.choices[0].message.content)
+    judge_responds = completion.choices[0].message.content
+    if judge_responds.lower() in ['yes']:
+        return True, 'Success, Image is a methodology, overview, or pipeline figure.'
+    return False, 'Failed, Image is not a methodology, overview, or pipeline figure.'
+
+
+def multi_turn_filter(image_path):
+    def encode_image(image_path):
+        with open(image_path, 'rb') as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
+
+    # Round 1: Check Exclusion Criteria
+    # {"decision": "yes"/"no", "reason": "YOUR REASON"}
+    prompt_round1 = """
+    Please analyze if the image meets the following exclusion criteria:
+
+    1. The image should not contain experimental tables, charts, or graphs in major part.
+    2. The image should not be purely text-based figures such as an algorithms figure.
+
+    Note: If the image violates any of the above criteria, please respond 'no'.
+    Please respond in the following format:
+    {"decision": "yes"/"no"}
+    """
+
+    # Round 2: Check Content Features
+    prompt_round2 = """
+    If the first round check passed, please analyze the following content features:
+    1. Does the image demonstrate a step-by-step process or workflow?
+    2. Does it contain text labels, annotations, or descriptions explaining procedures/techniques/systems?
+    3. Is there a clear logical connection and sequence between components?
+
+    Please respond based only on the above criteria in the following format:
+    {"decision": "yes"/"no"}
+    """
+
+    # Round 3: Check the basic structure of the image
+    prompt_round3 = """
+    If the second round check passed, please analyze the basic structure of the image:
+    1. Can you infer the methodology or pipeline from the image?
+    2. Does the overall layout match the typical characteristics of methodology figures in academic papers?
+
+    Please respond based only on the above criteria in the following format:
+    {"decision": "yes"/"no"}
+    """
+
+    base64_image = encode_image(image_path)
+    client = OpenAI(
+        api_key='sk-02ec4b4ba31a406894cbe3bdb92e96a1',
+        base_url='https://dashscope.aliyuncs.com/compatible-mode/v1',
+    )
+
+    messages = [
+        {
+            'role': 'system',
+            'content': [{'type': 'text', 'text': 'You are a helpful assistant.'}],
+        }
+    ]
+
+    # Execute three rounds of dialogue
+    prompts = [prompt_round1, prompt_round2, prompt_round3]
+    final_decision = True
+
+    for round_num, prompt in enumerate(prompts, 1):
+        if round_num == 1:
+            messages.append(
+                {
+                    'role': 'user',
+                    'content': [
+                        {
+                            'type': 'image_url',
+                            'image_url': {
+                                'url': f'data:image/jpeg;base64,{base64_image}'
+                            },
+                        },
+                        {'type': 'text', 'text': prompt},
+                    ],
+                }
+            )
+        else:
+            messages.append(
+                {'role': 'user', 'content': [{'type': 'text', 'text': prompt}]}
+            )
+
+        completion = client.chat.completions.create(
+            model='qwen-vl-max-2025-04-02',
+            messages=messages,
+            temperature=0.7,
+            top_p=0.8,
+        )
+
+        response = completion.choices[0].message
+        print(f'Round {round_num} response:', response.content)
+        messages.append(response.model_dump())
+
+        # regular expression to parse the response
+        try:
+            decision_match = re.search(r'"decision":\s*"(\w+)"', response.content)
+            if decision_match and decision_match.group(1).lower() == 'no':
+                final_decision = False
+                break
+        except Exception as e:
+            print(f'Warning: Error parsing response: {e}')
+            # 如果解析失败，回退到简单的字符串匹配
+            if '"decision": "no"' in response.content.lower():
+                final_decision = False
+                break
+
+    if final_decision:
+        return True, 'Success, Image is a methodology, overview, or pipeline figure.'
+    return False, 'Failed, Image is not a methodology, overview, or pipeline figure.'
