@@ -138,7 +138,11 @@ def text_code_to_pptx(
         # handle font, size, style and color
         font = run.font
         font.name = text_code_info['font']
-        font.size = Pt(text_code_info['size'])
+        #############################################
+        # font.size = Pt(text_code_info['size'])
+        font_size = max(1, text_code_info['size'])
+        font.size = Pt(font_size)
+        #############################################
         text_style = text_code_info['style']
         if text_style == 1:
             font.italic = True
@@ -385,5 +389,6 @@ def code_to_pptx(
         prs = image_code_to_pptx(image_info_list, prs=prs)
 
     if save_path is not None:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
         prs.save(save_path)
     return prs
