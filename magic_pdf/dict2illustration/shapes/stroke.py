@@ -74,7 +74,7 @@ def parse_stroke_dashstyle(s):
 
     if len(parts) == 2 and parts[0] > parts[1] and parts[0] // parts[1] <= 2:
         return MSO_LINE_DASH_STYLE.DASH
-    if len(parts) == 2 and parts[0] > parts[1] and parts[0] // parts[1] >= 4:
+    if len(parts) == 2 and parts[0] > parts[1] and parts[0] // parts[1] >= 3:  # 4:
         return MSO_LINE_DASH_STYLE.LONG_DASH
     if len(parts) == 2 and parts[0] < parts[1]:
         return MSO_LINE_DASH_STYLE.DOT

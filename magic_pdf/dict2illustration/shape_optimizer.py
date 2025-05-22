@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import copy
 from datetime import datetime
 from svgpathtools import svg2paths2
 from scipy.optimize import minimize
@@ -159,7 +160,8 @@ class ShapeOptimizer:
                         min_error = min(error, min_error)
                         optimal_shape = s
 
-            attributes = get_path_attributes(svg_path)
+            temp_svg_path = copy.deepcopy(svg_path)
+            attributes = get_path_attributes(temp_svg_path)
             optimal_shape.set_attributes(attributes)
             points = optimal_shape.generate(optimal_shape.adjustments)
 
@@ -413,7 +415,7 @@ class ShapeOptimizer:
 
             # 生成新的SVG文件名
             base_name = os.path.splitext(os.path.basename(svg_file))[0]
-            paper_name = svg_file.split('/')[1]
+            paper_name = svg_file.split('/')[-4]
             os.makedirs(os.path.join(unmatched_dir, paper_name), exist_ok=True)
             unmatched_svg_path = os.path.join(
                 unmatched_dir, paper_name, f'{base_name}_unmatched.svg'
@@ -521,10 +523,10 @@ class ShapeOptimizer:
             simplified_unmatched_svg_path = os.path.join(
                 unmatched_dir, paper_name, f'{base_name}_simplified_unmatched.svg'
             )
-            simplified_svg = simplify_svg(
-                unmatched_svg_path, simplified_unmatched_svg_path
-            )
-            slide = add_svg_to_slide(slide, simplified_unmatched_svg_path)
+            # simplified_svg = simplify_svg(
+            #     unmatched_svg_path, simplified_unmatched_svg_path
+            # )
+            # slide = add_svg_to_slide(slide, simplified_unmatched_svg_path)
             #########################################################
 
         """
